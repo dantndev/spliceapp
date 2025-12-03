@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import Datastore from 'nedb-promises'
 import { app } from 'electron'
 import path from 'path'
@@ -19,6 +20,7 @@ const db = Datastore.create({
 // Por simplicidad, en este prototipo, insertamos y permitimos duplicados si el usuario importa 2 veces,
 // O filtramos antes. Mejor filtrar: upsert basado en 'path'.
 
+// @typescript-eslint/explicit-function-return-type
 export async function saveSamples(samples) {
   const results = []
   for (const sample of samples) {
@@ -35,10 +37,12 @@ export async function saveSamples(samples) {
   return results
 }
 
+// @typescript-eslint/explicit-function-return-type
 export async function getAllSamples() {
   return await db.find({}).sort({ date: -1 })
 }
 
+// @typescript-eslint/explicit-function-return-type
 export async function clearAllSamples() {
   return await db.remove({}, { multi: true })
 }

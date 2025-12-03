@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -6,13 +7,13 @@ import fs from 'fs'
 import path from 'path'
 import { parseFile } from 'music-metadata'
 import { saveSamples, getAllSamples } from './db/database'
-import { fileURLToPath } from 'url'
 
 // Register privileged scheme to bypass some security restrictions
 protocol.registerSchemesAsPrivileged([
   { scheme: 'media', privileges: { secure: true, supportFetchAPI: true, bypassCSP: true } }
 ])
 
+// @typescript-eslint/explicit-function-return-type
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1200,
@@ -27,7 +28,7 @@ function createWindow() {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false 
+      webSecurity: false
     }
   })
 
@@ -50,6 +51,7 @@ function createWindow() {
 // --- HELPER: AUDIO CLASSIFICATION & ANALYSIS ---
 const AUDIO_EXTENSIONS = /\.(wav|mp3|aif|aiff|flac|ogg|m4a)$/i
 
+// @typescript-eslint/explicit-function-return-type
 function detectCategory(filename) {
   const lower = filename.toLowerCase()
   if (lower.includes('kick')) return 'Kick'
@@ -63,6 +65,7 @@ function detectCategory(filename) {
   return 'Other'
 }
 
+// @typescript-eslint/explicit-function-return-type
 function detectBpmAndKey(filename, metadata) {
   let bpm = null
   let key = null
@@ -87,6 +90,7 @@ function detectBpmAndKey(filename, metadata) {
   return { bpm, key }
 }
 
+// @typescript-eslint/explicit-function-return-type
 async function processFile(filePath, libraryName) {
   try {
     const stat = fs.statSync(filePath)
@@ -96,7 +100,7 @@ async function processFile(filePath, libraryName) {
     let metadata = {}
     try {
       metadata = await parseFile(filePath)
-    } catch (e) {
+    } catch {
       // Ignore metadata error, continue with basic file info
     }
 
@@ -122,6 +126,7 @@ async function processFile(filePath, libraryName) {
 }
 
 // Recursive Scan
+// @typescript-eslint/explicit-function-return-type
 async function scanDirectory(dir) {
   let results = []
   try {
@@ -148,12 +153,25 @@ async function scanDirectory(dir) {
 
 // --- IPC HANDLERS ---
 
-ipcMain.handle('import-content', async (event, { type, paths }) => {
+ipcMain.handle('read-file-buffer', async (event, filePath) => {
+  try {
+    // Verify file exists first
+    await fs.promises.access(filePath)
+    const buffer = await fs.promises.readFile(filePath)
+    return buffer
+  } catch (err) {
+    console.error(`Error reading file buffer for ${filePath}:`, err)
+    return null
+  }
+})
+
+ipcMain.handle('import-content', async (event, { type, paths, targetLibrary }) => {
   // type: 'folder' | 'files' | 'drag-folder'
   // paths: optional array of paths (for drag & drop)
+  // targetLibrary: optional string, if provided, files will be added to this library
 
   let filePathsToProcess = []
-  let folderName = 'Imported'
+  let folderName = targetLibrary || 'Imported'
 
   // 1. Determine Source
   if (paths) {
@@ -161,7 +179,8 @@ ipcMain.handle('import-content', async (event, { type, paths }) => {
     for (const p of paths) {
       const stat = fs.statSync(p)
       if (stat.isDirectory()) {
-        folderName = path.basename(p)
+        // Only set folderName if we are not adding to an existing library
+        if (!targetLibrary) folderName = path.basename(p)
         const folderFiles = await scanDirectory(p)
         filePathsToProcess = filePathsToProcess.concat(folderFiles)
       } else if (AUDIO_EXTENSIONS.test(p)) {
@@ -180,10 +199,10 @@ ipcMain.handle('import-content', async (event, { type, paths }) => {
     if (canceled || filePaths.length === 0) return null
 
     if (isFolder) {
-      folderName = path.basename(filePaths[0])
+      if (!targetLibrary) folderName = path.basename(filePaths[0])
       filePathsToProcess = await scanDirectory(filePaths[0])
     } else {
-      folderName = 'Individual'
+      if (!targetLibrary) folderName = 'Individual'
       filePathsToProcess = filePaths
     }
   }
@@ -210,10 +229,16 @@ ipcMain.handle('get-all-samples', async () => {
 })
 
 ipcMain.on('ondragstart', (event, filePath) => {
-  event.sender.startDrag({
-    file: filePath,
-    icon: icon
-  })
+  try {
+    if (fs.existsSync(filePath)) {
+      event.sender.startDrag({
+        file: filePath,
+        icon: icon
+      })
+    }
+  } catch (e) {
+    console.error('Drag start error:', e)
+  }
 })
 
 app.whenReady().then(() => {
@@ -225,12 +250,12 @@ app.whenReady().then(() => {
     // Assuming Renderer sends: media://C:/Users/Music/file.wav
     // URL object pathname might be /C:/Users/Music/file.wav
     // We need to strip the leading slash if on Windows, or use fileURLToPath logic.
-    
+
     // Easier approach: Reconstruct file:// URL
     const url = req.url.replace('media://', '')
     // Decode URI components (spaces, etc.)
     const filePath = decodeURI(url)
-    
+
     return net.fetch('file://' + filePath)
   })
 
